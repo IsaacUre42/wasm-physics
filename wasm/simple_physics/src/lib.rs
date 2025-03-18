@@ -13,6 +13,7 @@ struct Ball {
     restitution: f64,
     mass: f64,
     color: String,
+    velocity_buffer: Vector2D<f64>
 }
 
 #[wasm_bindgen]
@@ -60,6 +61,7 @@ impl Ball {
             restitution: 0.7,
             mass: if fixed {0.0} else {3.14 * radius * radius},
             color,
+            velocity_buffer: Vector2D::new(0.0,0.0)
         }
     }
 
@@ -121,7 +123,6 @@ impl Engine {
 
     #[wasm_bindgen]
     pub fn update(&mut self) {
-        const MAX_VELOCITY: f64 = 100.0;
         const GRAVITY: f64 = 0.1;
         const DECAY: f64 = 0.99;
         let mut collisions: Vec<(usize, usize)> = Vec::new();
@@ -155,7 +156,11 @@ impl Engine {
 
         for ball in self.balls.iter_mut() {
             if !(ball.mass == 0.0) {
-                ball.velocity.y += GRAVITY;
+                ball.velocity_buffer.y += GRAVITY;
+                ball.velocity += ball.velocity_buffer;
+                ball.velocity_buffer.x = 0.0;
+                ball.velocity_buffer.y = 0.0;
+
                 ball.position += ball.velocity;
                 ball.velocity *= DECAY;
             }
@@ -195,8 +200,20 @@ fn resolve_ball_collision(a: &mut Ball, b: &mut Ball) {
     j /= b_inv_mass + a_inv_mass;
 
     let impulse = normal.mul(j);
-    a.velocity += Vector2D::new(impulse.mul(a_inv_mass).mul(a_ratio).x, impulse.mul(a_inv_mass).mul(a_ratio).y);
-    b.velocity -= Vector2D::new(impulse.mul(b_inv_mass).mul(b_ratio).x, impulse.mul(b_inv_mass).mul(b_ratio).y);
+    let a_mag = a.velocity_buffer.length();
+    let b_mag = b.velocity_buffer.length();
+    a.velocity_buffer += Vector2D::new(impulse.mul(a_inv_mass).mul(a_ratio).x, impulse.mul(a_inv_mass).mul(a_ratio).y);
+    b.velocity_buffer -= Vector2D::new(impulse.mul(b_inv_mass).mul(b_ratio).x, impulse.mul(b_inv_mass).mul(b_ratio).y);
+
+    // Janky hack to try and conserve velocity somewhat. Doesn't work for ball block for some reason.
+    let a_conserved = impulse.mul(a_inv_mass).mul(a_ratio).length() + a_mag;
+    let b_conserved = impulse.mul(b_inv_mass).mul(b_ratio).length() + b_mag;
+    if (a.velocity_buffer.length() != 0.0) {
+        a.velocity_buffer = a.velocity_buffer.mul(a_conserved/a.velocity_buffer.length());
+    }
+    if b.velocity_buffer.length() != 0.0 {
+        b.velocity_buffer = b.velocity_buffer.mul(b_conserved/b.velocity_buffer.length());
+    }
 }
 
 fn correct_positions_balls(a: &mut Ball, b: &mut Ball) {
@@ -294,5 +311,5 @@ fn resolve_ball_box_collision(ball: &mut Ball, block: &Block) {
     let mut j = -(1.0 + ball.restitution) * vel_along_normal;
     j /= b_inv_mass;
     let impulse = normal.mul(j);
-    ball.velocity += Vector2D::new(impulse.mul(b_inv_mass).x, impulse.mul(b_inv_mass).y);
+    ball.velocity_buffer += Vector2D::new(impulse.mul(b_inv_mass).x, impulse.mul(b_inv_mass).y);
 }
