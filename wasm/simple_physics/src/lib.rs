@@ -1,6 +1,7 @@
 use std::ops::Mul;
 use wasm_bindgen::prelude::*;
 use vector2d::Vector2D;
+use web_sys::HtmlCanvasElement;
 
 //https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-basics-and-impulse-resolution--gamedev-6331t#
 
@@ -53,13 +54,14 @@ impl Block {
 #[wasm_bindgen]
 impl Ball {
     #[wasm_bindgen(constructor)]
-    pub fn new(x: f64, y: f64, radius: f64, vx: f64, vy: f64, color: String, fixed: bool) -> Ball {
+    pub fn new(x: f64, y: f64, radius: f64, vx: f64, vy: f64, color: String, mass: f64) -> Ball {
         Ball {
             position: Vector2D::new(x,y),
             velocity: Vector2D::new(vx,vy),
             radius,
-            restitution: 0.7,
-            mass: if fixed {0.0} else {3.14 * radius * radius},
+            restitution: 0.5,
+            // mass: if fixed {0.0} else {3.14 * radius * radius},
+            mass,
             color,
             velocity_buffer: Vector2D::new(0.0,0.0)
         }
@@ -175,6 +177,28 @@ impl Engine {
         for (i, block) in ball_block_collisions {
             let ball = &mut self.balls[i];
             correct_positions_ball_block(ball, block);
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn draw(&mut self, canvas: HtmlCanvasElement) {
+        let context = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into::<web_sys::CanvasRenderingContext2d>()
+            .unwrap();
+        context.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+        for ball in self.balls.iter() {
+            context.set_fill_style_str(format!("rgb(0, 0, {})", (100.0 + ball.velocity.length() * 10.0) as u16).as_str());
+            context.begin_path();
+            context.arc(ball.position.x, ball.position.y, ball.radius, 0.0, 2.0 * std::f64::consts::PI).unwrap();
+            context.fill();
+        }
+        context.set_fill_style_str("#000000");
+        for block in self.blocks.iter() {
+            context.fill_rect(block.position.x, block.position.y, block.size.x, block.size.y);
+
         }
     }
 }
