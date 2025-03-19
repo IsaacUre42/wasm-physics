@@ -1,3 +1,4 @@
+use std::cmp::Ordering::Greater;
 use std::ops::Mul;
 use wasm_bindgen::prelude::*;
 use vector2d::Vector2D;
@@ -59,7 +60,7 @@ impl Ball {
             position: Vector2D::new(x,y),
             velocity: Vector2D::new(vx,vy),
             radius,
-            restitution: 0.5,
+            restitution: 0.8,
             // mass: if fixed {0.0} else {3.14 * radius * radius},
             mass,
             color,
@@ -144,12 +145,14 @@ impl Engine {
             }
         }
 
+
         for (i, j) in collisions.clone() {
             let (ball, other_ball) = self.balls.split_at_mut(j);
             let ball = &mut ball[i];
             let other_ball = &mut other_ball[0];
             resolve_ball_collision(ball, other_ball);
         }
+
 
         for (i, block) in ball_block_collisions.clone() {
             let ball = &mut self.balls[i];
@@ -178,6 +181,7 @@ impl Engine {
             let ball = &mut self.balls[i];
             correct_positions_ball_block(ball, block);
         }
+
     }
 
     #[wasm_bindgen]
@@ -233,15 +237,15 @@ fn resolve_ball_collision(a: &mut Ball, b: &mut Ball) {
     let a_conserved = impulse.mul(a_inv_mass).mul(a_ratio).length() + a_mag;
     let b_conserved = impulse.mul(b_inv_mass).mul(b_ratio).length() + b_mag;
     if (a.velocity_buffer.length() != 0.0) {
-        a.velocity_buffer = a.velocity_buffer.mul(a_conserved/a.velocity_buffer.length());
+        a.velocity_buffer = a.velocity_buffer.mul(a_conserved/a.velocity_buffer.length()).mul(0.9);
     }
     if b.velocity_buffer.length() != 0.0 {
-        b.velocity_buffer = b.velocity_buffer.mul(b_conserved/b.velocity_buffer.length());
+        b.velocity_buffer = b.velocity_buffer.mul(b_conserved/b.velocity_buffer.length()).mul(0.9);
     }
 }
 
 fn correct_positions_balls(a: &mut Ball, b: &mut Ball) {
-    let percent = 0.4;
+    let percent = 0.1;
     let slop = 0.01;
 
     let collision_depth = -((a.position - b.position).length() - (a.radius + b.radius));
@@ -251,7 +255,7 @@ fn correct_positions_balls(a: &mut Ball, b: &mut Ball) {
     let normal = (a.position - b.position).normalise();
     let a_inv_mass = if (a.mass == 0.0) {0.0} else {1.0/a.mass};
     let b_inv_mass = if (b.mass == 0.0) {0.0} else {1.0/b.mass};
-    let correction = normal.mul((collision_depth / (a_inv_mass + b_inv_mass)) * percent);
+    let correction = normal.mul((collision_depth / (a_inv_mass + b_inv_mass)) * (a_inv_mass + b_inv_mass).min(percent));
     a.position += correction.mul(a_inv_mass);
     b.position -= correction.mul(b_inv_mass);
 }
