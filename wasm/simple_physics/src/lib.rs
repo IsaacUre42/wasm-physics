@@ -137,7 +137,7 @@ struct Engine {
     width: u32,
     height: u32,
     balls: Vec<Rc<RefCell<Ball>>>,
-    blocks: Vec<Block>
+    blocks: Vec<Rc<RefCell<Block>>>
 }
 
 #[wasm_bindgen]
@@ -145,6 +145,7 @@ impl Engine {
     #[wasm_bindgen(constructor)]
     pub fn new(width: u32, height: u32, balls: Vec<Ball>, blocks: Vec<Block>) -> Engine {
         let balls = balls.into_iter().map(|ball| Rc::new(RefCell::new(ball))).collect();
+        let blocks = blocks.into_iter().map(|block| Rc::new(RefCell::new(block))).collect();
         Engine {
             width,
             height,
@@ -160,17 +161,15 @@ impl Engine {
 
     #[wasm_bindgen(getter)]
     pub fn blocks(&self) -> Vec<Block> {
-        self.blocks.clone()
+        self.blocks.iter().map(|ball| ball.borrow().clone()).collect()
     }
 
     #[wasm_bindgen]
-    pub fn add_ball(&mut self, ball: Ball) {
-        self.balls.push(Rc::new(RefCell::new(ball)));
-    }
+    pub fn add_ball(&mut self, ball: Ball) { self.balls.push(Rc::new(RefCell::new(ball))); }
 
     #[wasm_bindgen]
     pub fn add_block(&mut self, block: Block) {
-        self.blocks.push(block);
+        self.blocks.push(Rc::new(RefCell::new(block)));
     }
 
     #[wasm_bindgen]
@@ -181,6 +180,7 @@ impl Engine {
         let mut collisions: Vec<Manifold> = Vec::new();
 
         for i in 0..self.balls.iter().len() {
+            //Ball v ball collisions
             for j in (i+1)..self.balls.iter().len() {
                 let a = Rc::clone(&self.balls[i]);
                 let b = Rc::clone(&self.balls[j]);
@@ -191,6 +191,21 @@ impl Engine {
                     0.0
                 );
                 if balls_colliding(a, b, &mut m) {
+                    collisions.push(m);
+                }
+            }
+
+            //Ball v block collisions
+            for block in self.blocks.iter() {
+                let a = Rc::clone(&self.balls[i]);
+                let b = Rc::clone(&block);
+                let mut m = Manifold::new(
+                    a.clone(),
+                    b.clone(),
+                    Vector2D::new(0.0,0.0),
+                    0.0
+                );
+                if ball_block_colliding(a, b, &mut m) {
                     collisions.push(m);
                 }
             }
@@ -233,6 +248,7 @@ impl Engine {
         }
         context.set_fill_style_str("#000000");
         for block in self.blocks.iter() {
+            let block = block.borrow();
             context.fill_rect(block.position.x, block.position.y, block.size.x, block.size.y);
 
         }
@@ -263,9 +279,48 @@ fn balls_colliding(a: Rc<RefCell<Ball>>, b: Rc<RefCell<Ball>>, m: &mut Manifold)
     true
 }
 
-fn ball_block_colliding(a: Rc<RefCell<Ball>>, b: Rc<RefCell<Block>>, m: &mut Manifold) {
+fn ball_block_colliding(a: Rc<RefCell<Ball>>, b: Rc<RefCell<Block>>, m: &mut Manifold) -> bool{
     let ball = a.borrow();
     let block = b.borrow();
+
+    let half_extents = block.size.mul(0.5);
+    let difference = ball.position - (block.position + half_extents);
+    let x_clamped = difference.x.clamp(-half_extents.x, half_extents.x);
+    let y_clamped = difference.y.clamp(-half_extents.y, half_extents.y);
+    let clamped = Vector2D::new(x_clamped, y_clamped);
+
+    let mut closest = (block.position + half_extents) + clamped;
+
+    let half_extents = block.size.mul(0.5);
+    let difference = ball.position - (block.position + half_extents);
+
+    let mut inside = false;
+
+    //Checks if center of ball is inside the box.
+    if difference == (closest - (block.position + half_extents)) {
+        inside = true;
+        if difference.x.abs() < difference.y.abs() {
+            closest.x = if (closest.x - (half_extents.x + block.position.x)) > 0.0 {block.position.x + block.size.x} else {block.position.x};
+        } else {
+            closest.y = if (closest.y - (half_extents.y + block.position.y)) > 0.0 {block.position.y + block.size.y} else {block.position.y};
+        }
+    }
+
+    let mut distance = (ball.position - closest).length_squared();
+    let mut normal = (ball.position - closest).normalise();
+    normal = normal.mul(if inside {-1.0} else {1.0});
+    if distance > ball.radius.powi(2) && !inside {
+        return false;
+    }
+
+    distance = distance.sqrt();
+    m.normal = normal;
+    m.penetration = ball.radius - distance;
+    true
+}
+
+fn block_block_colliding(a: Rc<RefCell<Ball>>, b: Rc<RefCell<Block>>, m: &mut Manifold) -> bool {
+    todo!()
 }
 
 
@@ -295,35 +350,20 @@ fn resolve_collision(m: &Manifold) {
     let b_vel = b.velocity() - Vector2D::new(impulse.mul(b.inv_mass()).mul(b_ratio).x, impulse.mul(b.inv_mass()).mul(b_ratio).y);
 
     if (a.mass() != 0.0) {
-        a.set_velocity(a_vel);   
+        a.set_velocity(a_vel);
     }
     if b.mass() != 0.0 {
-        b.set_velocity(b_vel);   
+        b.set_velocity(b_vel);
     }
-}
-
-fn correct_positions_balls(a: &mut Ball, b: &mut Ball) {
-    let percent = 0.1;
-    let slop = 0.01;
-
-    let collision_depth = -((a.position - b.position).length() - (a.radius + b.radius));
-    if collision_depth < slop{
-        return;
-    }
-    let normal = (a.position - b.position).normalise();
-    
-    let correction = normal.mul((collision_depth / (a.inv_mass + b.inv_mass)) * (a.inv_mass + b.inv_mass).min(percent));
-    a.position += correction.mul(a.inv_mass);
-    b.position -= correction.mul(b.inv_mass);
 }
 
 fn correct_positions(m: &Manifold ) {
-    let percent = 0.1;
+    let percent = 0.2;
     let slop = 0.01;
-    
+
     let mut a = m.object_a.borrow_mut();
     let mut b = m.object_b.borrow_mut();
-    
+
     if m.penetration < slop{
         return;
     }
@@ -331,91 +371,11 @@ fn correct_positions(m: &Manifold ) {
     let correction = m.normal.mul((m.penetration / (a.inv_mass() + b.inv_mass())) * (a.inv_mass() + b.inv_mass()).min(percent));
     let a_pos =  a.position() + correction.mul(a.inv_mass());
     let b_pos = b.position() - correction.mul(b.inv_mass());
+
     if a.mass() > 0.0 {
-        a.set_position(a_pos);   
+        a.set_position(a_pos);
     }
     if b.mass() > 0.0 {
-        b.set_position(b_pos);   
+        b.set_position(b_pos);
     }
-}
-
-fn closest_point_ball_block(ball: &Ball, block: &Block) -> Vector2D<f64> {
-    let half_extents = block.size.mul(0.5);
-    let difference = ball.position - (block.position + half_extents);
-    let x_clamped = difference.x.clamp(-half_extents.x, half_extents.x);
-    let y_clamped = difference.y.clamp(-half_extents.y, half_extents.y);
-    let clamped = Vector2D::new(x_clamped, y_clamped);
-
-    (block.position + half_extents) + clamped
-}
-
-fn correct_positions_ball_block(ball: &mut Ball, block: &Block) {
-    let percent = 0.6;
-    let slop = 0.01;
-
-    let mut closest = closest_point_ball_block(ball, block);
-
-    let half_extents = block.size.mul(0.5);
-    let difference = ball.position - (block.position + half_extents);
-
-    let mut inside = false;
-
-    if difference == (closest - (block.position + half_extents)) {
-        inside = true;
-        if difference.x.abs() < difference.y.abs() {
-            closest.x = if (closest.x - (half_extents.x + block.position.x)) > 0.0 {block.position.x + block.size.x} else {block.position.x};
-        } else {
-            closest.y = if (closest.y - (half_extents.y + block.position.y)) > 0.0 {block.position.y + block.size.y} else {block.position.y};
-        }
-    }
-
-    let collision_depth = -((closest - ball.position).length() - ball.radius);
-    if collision_depth < slop {
-        return;
-    }
-
-    let mut normal = (ball.position - closest).normalise();
-    normal = normal.mul(if inside {-1.0} else {1.0});
-    
-    let correction = normal.mul((collision_depth / ball.inv_mass) * percent);
-    ball.position += correction.mul(ball.inv_mass);
-}
-
-fn resolve_ball_box_collision(ball: &mut Ball, block: &Block) {
-    let mut closest = closest_point_ball_block(ball, block);
-
-    let half_extents = block.size.mul(0.5);
-    let difference = ball.position - (block.position + half_extents);
-
-    let mut inside = false;
-
-    //Checks if center of ball is inside the box.
-    if difference == (closest - (block.position + half_extents)) {
-        inside = true;
-        // log(format!("Half Extents: {},{}", half_extents.x, half_extents.y).as_str());
-        // log(format!("Ball: {},{}", ball.position.x, ball.position.y).as_str());
-        // log(format!("Difference: {}, {}", difference.x, difference.y).as_str());
-        if difference.x.abs() < difference.y.abs() {
-            closest.x = if (closest.x - (half_extents.x + block.position.x)) > 0.0 {block.position.x + block.size.x} else {block.position.x};
-        } else {
-            closest.y = if (closest.y - (half_extents.y + block.position.y)) > 0.0 {block.position.y + block.size.y} else {block.position.y};
-        }
-        log("Inside:");
-    }
-    // log(format!("Ball: {}, {}; Closest: {}, {}", ball.position.x, ball.position.y, closest.x, closest.y).as_str());
-    let mut normal = (ball.position - closest).normalise();
-    normal = normal.mul(if inside {-1.0} else {1.0});
-    // log(format!("Normal: {}, {}", normal.x, normal.y).as_str());
-
-    let vel_along_normal = Vector2D::dot(ball.velocity, normal);
-
-    if vel_along_normal > 0.0 {
-        return;
-    }
-
-    let b_inv_mass = if ball.mass != 0.0 {1.0/ball.mass} else {0.0};
-    let mut j = -(1.0 + ball.restitution) * vel_along_normal;
-    j /= b_inv_mass;
-    let impulse = normal.mul(j);
-    ball.velocity += Vector2D::new(impulse.mul(b_inv_mass).x, impulse.mul(b_inv_mass).y);
 }
