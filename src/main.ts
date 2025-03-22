@@ -2,15 +2,14 @@ import init, {Ball, Block, Engine} from '../public/simple_physics.js';
 
 let engine: Engine;
 let canvas = document.querySelector("canvas");
-let counter = 0
+// @ts-ignore
+let fpsInterval: number, startTime: number, now, then: number, elapsed;
+
 
 async function run() {
     await init();
 
     let balls : Ball[] = [];
-    // for (let i = 0; i < 20; i++) {
-    //     balls.push(new Ball(50 * i, 500, 25, 0, 0, "#740093", true));
-    // }
     if (canvas === null) {
         canvas = document.body.appendChild(new HTMLCanvasElement());
     }
@@ -25,48 +24,41 @@ async function run() {
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
 
+    for (let i = 0; i < 20; i++) {
+        engine.add_ball(new Ball(200 + (i*30), 300, 30, 0, 0, "#00FFFF", 0, 0.8));
+    }
+
     canvas.addEventListener("click", ev => {
-        let ball = new Ball(ev.clientX + Math.random() + 0.5, ev.clientY + Math.random() + 0.5, 30, 0, 0, "#00FFFF", 3);
+        let ball = new Ball(ev.clientX + Math.random() + 0.5, ev.clientY + Math.random() + 0.5, 30, 0, 0, "#00FFFF", 3, 0.8);
         engine.add_ball(ball);
     });
 
+    startAnimating(120);
+}
+
+//https://stackoverflow.com/questions/19764018/controlling-fps-with-requestanimationframe
+function startAnimating(fps: number) {
+    fpsInterval = 1000/fps;
+    then = window.performance.now();
+    startTime = then;
     requestAnimationFrame(runLoop)
 }
 
+/**
+ * Engine Runs as fast as possible,
+ * Drawing is limited to fps
+ * **/
 function runLoop() {
-    engine.update();
-    counter += 1;
-    if (counter < 1000) {
-        let ball = new Ball(500 + Math.random() + 0.5, 200 + Math.random() + 0.5, 20, 0, 0, "#00FFFF", Math.random() * 20);
-        let ball2 = new Ball(1500 + Math.random() + 0.5, 200 + Math.random() + 0.5, 20, 0, 0, "#00FFFF", Math.random() * 20);
-
-        engine.add_ball(ball);
-        engine.add_ball(ball2);
-    }
-
-    // draw(engine.balls, engine.blocks);
-    let_rust_draw();
     requestAnimationFrame(runLoop);
-}
 
-// function draw(balls: Array<Ball>, blocks: Array<Block>) {
-//     const canvas = document.querySelector("canvas");
-//     if (canvas === null) { return; }
-//     const ctx = canvas.getContext("2d");
-//     if (ctx === null) { return; }
-//     ctx.clearRect(0, 0, canvas.width, canvas.height);
-//     for (const ball of balls) {
-//         ctx.fillStyle = ball.color;
-//         ctx.beginPath();
-//         ctx.arc(ball.position[0], ball.position[1], ball.radius, 0, 2 * Math.PI);
-//         ctx.fill();
-//     }
-//
-//     ctx.fillStyle = "#000000"
-//     for (const block of blocks) {
-//         ctx.fillRect(block.position[0], block.position[1], block.size[0], block.size[1]);
-//     }
-// }
+    now = window.performance.now();
+    elapsed = now - then;
+    if (elapsed > fpsInterval) {
+        then = now - (elapsed % fpsInterval);
+        let_rust_draw();
+        engine.update_manifest();
+    }
+}
 
 function let_rust_draw() {
     if (canvas === null) {
