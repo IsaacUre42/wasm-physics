@@ -1,39 +1,67 @@
+import React from 'react';
 import init, {Ball, Block, Engine} from '../public/simple_physics.js';
+import Ui from "./ui.tsx";
+import {createRoot} from "react-dom/client";
+import '@mantine/core/styles.css';
+import { MantineProvider } from '@mantine/core';
+import {BallParams} from "./types.ts";
 
 let engine: Engine;
-let canvas = document.querySelector("canvas");
+let canvas: HTMLCanvasElement;
 // @ts-ignore
 let fpsInterval: number, startTime: number, now, then: number, elapsed;
+
+let ballParams: BallParams = {
+    size: 30,
+    color: "#00FFFF",
+    restitution: 0.5,
+    mass: 3,
+    fixed: false
+};
+
+function setBallPrams(params: BallParams) {
+    if (params !== null) {
+        ballParams = params;
+    }
+}
 
 
 async function run() {
     await init();
 
     let balls : Ball[] = [];
-    if (canvas === null) {
-        canvas = document.body.appendChild(new HTMLCanvasElement());
-    }
+    canvas = document.createElement("canvas");
+    canvas = document.body.insertBefore(canvas, document.body.firstChild);
+    canvas.style.width = "100vw";
+    canvas.style.height = "100vh";
 
     let block = new Block(20, 0, 100, canvas.clientHeight);
     let block2 = new Block(0, canvas.clientHeight - 200, canvas.clientWidth, 100);
     let block3 = new Block(canvas.clientWidth - 100, 0, 100, canvas.clientHeight);
-    let block4 = new Block(500, 700, 300, 100);
-    let block5 = new Block(1700, 500, 300, 2000);
 
-    engine = new Engine(canvas.clientWidth, canvas.clientHeight, balls, [block, block2, block3, block4, block5]);
+    engine = new Engine(canvas.clientWidth, canvas.clientHeight, balls, [block, block2, block3]);
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
 
-    for (let i = 0; i < 20; i++) {
-        engine.add_ball(new Ball(200 + (i*30), 300, 30, 0, 0, "#00FFFF", 0, 0.8));
-    }
 
     canvas.addEventListener("click", ev => {
-        let ball = new Ball(ev.clientX + Math.random() + 0.5, ev.clientY + Math.random() + 0.5, 30, 0, 0, "#00FFFF", 3, 0.8);
+        let ball = new Ball(
+            ev.clientX + Math.random() + 0.5,
+            ev.clientY + Math.random() + 0.5,
+            ballParams.size, 0, 0,
+            ballParams.color,
+            ballParams.fixed ? 0 : ballParams.mass,
+            ballParams.restitution);
         engine.add_ball(ball);
     });
 
-    startAnimating(120);
+    let ui = document.getElementById("ui");
+    if (ui !== null) {
+        const root = createRoot(ui);
+        root.render(<MantineProvider><Ui setParams={setBallPrams}/></MantineProvider>);
+    }
+
+    startAnimating(60);
 }
 
 //https://stackoverflow.com/questions/19764018/controlling-fps-with-requestanimationframe

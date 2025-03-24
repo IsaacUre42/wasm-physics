@@ -241,7 +241,8 @@ impl Engine {
         context.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
         for ball in self.balls.iter() {
             let ball = ball.borrow();
-            context.set_fill_style_str(format!("rgb(0, 0, {})", (100.0 + ball.velocity.length() * 10.0) as u16).as_str());
+            // context.set_fill_style_str(format!("rgb(0, 0, {})", (100.0 + ball.velocity.length() * 10.0) as u16).as_str());
+            context.set_fill_style_str(ball.color.as_str());
             context.begin_path();
             context.arc(ball.position.x, ball.position.y, ball.radius, 0.0, 2.0 * std::f64::consts::PI).unwrap();
             context.fill();
@@ -359,12 +360,13 @@ fn resolve_collision(m: &Manifold) {
 
 fn correct_positions(m: &Manifold ) {
     let percent = 0.2;
-    let slop = 0.01;
+    let slop = 0.02;
 
     let mut a = m.object_a.borrow_mut();
     let mut b = m.object_b.borrow_mut();
 
     if m.penetration < slop{
+        log("small");
         return;
     }
 

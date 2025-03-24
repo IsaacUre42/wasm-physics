@@ -4,10 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + TS</title>
+    <title>Physics</title>
   </head>
-  <body>
-    <canvas style="width: 100vw; height: 100vh"></canvas>
-    <script type="module" src="/src/main.ts"></script>
+  <body style="overflow: hidden">
+    <div id="ui" style="height: 400px; width: 200px; background: #dddddd; display: block; position: absolute; top: 0; right: 0; box-shadow: -5px 5px 15px 5px rgba(0,0,0,0.57); border: 2px #000000 solid; border-radius: 5px"></div>
+    <canvas id="preview" style="display: block;"></canvas>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
