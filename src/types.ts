@@ -5,3 +5,10 @@ export type BallParams = {
     mass: number;
     fixed: boolean;
 };
+
+export type BoxParams = {
+    width: number;
+    height: number;
+    color: string;
+    restitution: number;
+}

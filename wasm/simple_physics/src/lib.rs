@@ -39,16 +39,20 @@ struct Ball {
 #[derive(Clone)]
 struct Block {
     position: Vector2D<f64>,
-    size: Vector2D<f64>
+    size: Vector2D<f64>,
+    color: String,
+    restitution: f64
 }
 
 #[wasm_bindgen]
 impl Block {
     #[wasm_bindgen(constructor)]
-    pub fn new(x: f64, y: f64, width: f64, height: f64) -> Block {
+    pub fn new(x: f64, y: f64, width: f64, height: f64, color: String, restitution: f64) -> Block {
         Block {
             position: Vector2D::new(x,y),
-            size: Vector2D::new(width, height)
+            size: Vector2D::new(width, height),
+            color,
+            restitution
         }
     }
 
@@ -60,6 +64,11 @@ impl Block {
     #[wasm_bindgen(getter)]
     pub fn size(&self) -> Vec<f64> {
         vec![self.size.x, self.size.y]
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn color(&self) -> String {
+        self.color.clone()
     }
 }
 
@@ -109,7 +118,7 @@ impl Collidable for Block {
     fn velocity(&self) -> Vector2D<f64> { Vector2D::new(0.0, 0.0) }
     fn mass(&self) -> f64 { 0.0 }
     fn inv_mass(&self) -> f64 { 0.0 }
-    fn restitution(&self) -> f64 { 1.0 }
+    fn restitution(&self) -> f64 { self.restitution }
     fn set_position(&mut self, position: Vector2D<f64>) { }
     fn set_velocity(&mut self, velocity: Vector2D<f64>) { }
 }
@@ -134,8 +143,8 @@ impl Manifold {
 
 #[wasm_bindgen]
 struct Engine {
-    width: u32,
-    height: u32,
+    width: f64,
+    height: f64,
     balls: Vec<Rc<RefCell<Ball>>>,
     blocks: Vec<Rc<RefCell<Block>>>
 }
@@ -143,7 +152,7 @@ struct Engine {
 #[wasm_bindgen]
 impl Engine {
     #[wasm_bindgen(constructor)]
-    pub fn new(width: u32, height: u32, balls: Vec<Ball>, blocks: Vec<Block>) -> Engine {
+    pub fn new(width: f64, height: f64, balls: Vec<Ball>, blocks: Vec<Block>) -> Engine {
         let balls = balls.into_iter().map(|ball| Rc::new(RefCell::new(ball))).collect();
         let blocks = blocks.into_iter().map(|block| Rc::new(RefCell::new(block))).collect();
         Engine {
@@ -247,12 +256,25 @@ impl Engine {
             context.arc(ball.position.x, ball.position.y, ball.radius, 0.0, 2.0 * std::f64::consts::PI).unwrap();
             context.fill();
         }
-        context.set_fill_style_str("#000000");
         for block in self.blocks.iter() {
             let block = block.borrow();
+            context.set_fill_style_str(block.color.as_str());
             context.fill_rect(block.position.x, block.position.y, block.size.x, block.size.y);
 
         }
+    }
+
+    #[wasm_bindgen]
+    pub fn cull_balls(&mut self) {
+        self.balls.retain(|ball| {
+            let ball = ball.borrow();
+            ball.position.y < (self.height + ball.radius)
+        });
+    }
+    
+    #[wasm_bindgen]
+    pub fn count_balls(&self) -> usize {
+        self.balls.len()
     }
 }
 
@@ -359,7 +381,7 @@ fn resolve_collision(m: &Manifold) {
 }
 
 fn correct_positions(m: &Manifold ) {
-    let percent = 0.2;
+    let percent = 0.4;
     let slop = 0.02;
 
     let mut a = m.object_a.borrow_mut();
