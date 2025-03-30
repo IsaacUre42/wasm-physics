@@ -11,3 +11,5 @@ A browser tab should open but if not then navigate to the url displayed in the t
 A simple UI is implemented in the top right, adjust values to your liking and click to spawn the object.
 
 ##### !NOTE! Resizing your browser window will mess up the clicking and the canvas so refresh after resizing.
+
+![wasm-physics](https://github.com/user-attachments/assets/ea4dc33f-ed4c-4d20-9f0a-ce840abdbc37)
